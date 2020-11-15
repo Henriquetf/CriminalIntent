@@ -1,5 +1,6 @@
 package com.henrique.criminalintent
 
+import android.text.format.DateFormat
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import java.util.*
@@ -11,4 +12,8 @@ data class Crime(
     var title: String = "",
     var date: Date = Date(),
     var isSolved: Boolean = false,
-)
+) {
+    fun formattedDate(): String {
+        return DateFormat.format("EEEE, MMM dd, yyyy", this.date).toString()
+    }
+}

@@ -1,18 +1,18 @@
 package com.henrique.criminalintent
 
+import android.content.Context
 import android.os.Bundle
-import android.text.format.DateFormat
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import java.util.*
 
 private const val TAG = "CrimeListFragment"
 
@@ -20,11 +20,30 @@ private const val VIEW_TYPE_CRIME = 0
 private const val VIEW_TYPE_POLICE_CRIME = 1
 
 class CrimeListFragment : Fragment() {
+
+    interface Callbacks {
+        fun onCrimeSelected(crimeId: UUID)
+    }
+
     private lateinit var crimeRecyclerView: RecyclerView
     private var adapter: CrimeAdapter = CrimeAdapter(emptyList())
 
     private val crimeListViewModel by lazy {
         ViewModelProvider(this).get(CrimeListViewModel::class.java)
+    }
+
+    private var callbacks: Callbacks? = null
+
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+
+        callbacks = context as Callbacks?
+    }
+
+    override fun onDetach() {
+        super.onDetach()
+
+        callbacks = null
     }
 
     override fun onCreateView(
@@ -77,7 +96,7 @@ class CrimeListFragment : Fragment() {
             this.crime = crime
 
             titleTextView.text = crime.title
-            dateTextView.text = DateFormat.format("EEEE, MMM dd, yyyy", crime.date)
+            dateTextView.text = crime.formattedDate()
 
             solvedImageView.visibility = if (crime.isSolved) {
                 View.VISIBLE
@@ -87,8 +106,7 @@ class CrimeListFragment : Fragment() {
         }
 
         override fun onClick(v: View?) {
-            Toast.makeText(context, "${crime.title} pressed!", Toast.LENGTH_SHORT)
-                .show()
+            callbacks?.onCrimeSelected(crime.id)
         }
     }
 
