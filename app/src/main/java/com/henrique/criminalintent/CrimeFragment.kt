@@ -1,8 +1,14 @@
 package com.henrique.criminalintent
 
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.provider.ContactsContract
 import android.text.Editable
 import android.text.TextWatcher
+import android.text.format.DateFormat
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -17,6 +23,8 @@ private const val TAG = "CrimeFragment"
 private const val ARG_CRIME_ID = "crime_id"
 private const val DIALOG_DATE = "DialogDate"
 private const val REQUEST_DATE = 0
+private const val REQUEST_CONTACT = 1
+private const val DATE_FORMAT = "EEE, MMM, dd"
 
 class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
     private lateinit var crime: Crime
@@ -24,6 +32,8 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
     private lateinit var titleField: EditText
     private lateinit var dateButton: Button
     private lateinit var solvedCheckBox: CheckBox
+    private lateinit var chooseSuspectButton: Button
+    private lateinit var reportButton: Button
 
     private val crimeDetailViewModel by lazy {
         ViewModelProvider(this).get(CrimeDetailViewModel::class.java)
@@ -50,6 +60,8 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
             titleField = findViewById(R.id.crime_title)
             dateButton = findViewById(R.id.crime_date)
             solvedCheckBox = findViewById(R.id.crime_solved)
+            chooseSuspectButton = findViewById(R.id.crime_choose_suspect)
+            reportButton = findViewById(R.id.crime_report)
         }
 
         return view
@@ -64,14 +76,39 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
                 updateUI()
             }
         }
-    }
 
-    private fun updateUI() {
-        titleField.setText(crime.title)
-        dateButton.text = crime.formattedDate()
-        solvedCheckBox.apply {
-            isChecked = crime.isSolved
-            jumpDrawablesToCurrentState()
+        dateButton.setOnClickListener {
+            val datePicker = DatePickerFragment.newInstance(crime.date)
+
+            datePicker.setTargetFragment(this, REQUEST_DATE)
+            datePicker.show(requireFragmentManager(), DIALOG_DATE)
+        }
+
+        chooseSuspectButton.apply {
+            val pickContactIntent =
+                Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI)
+
+            setOnClickListener {
+                startActivityForResult(pickContactIntent, REQUEST_CONTACT)
+            }
+
+            val packageManager = requireActivity().packageManager
+            val resolvedActivity =
+                packageManager.resolveActivity(pickContactIntent, PackageManager.MATCH_DEFAULT_ONLY)
+
+            isEnabled = resolvedActivity != null
+        }
+
+        reportButton.setOnClickListener {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, getCrimeReport())
+                putExtra(Intent.EXTRA_SUBJECT, getString(R.string.crime_report_subject))
+            }
+
+            val chooserIntent = Intent.createChooser(intent, getString(R.string.send_report))
+
+            startActivity(chooserIntent)
         }
     }
 
@@ -107,13 +144,6 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
                 crime.isSolved = isChecked
             }
         }
-
-        dateButton.setOnClickListener {
-            val datePicker = DatePickerFragment.newInstance(crime.date)
-
-            datePicker.setTargetFragment(this, REQUEST_DATE)
-            datePicker.show(requireFragmentManager(), DIALOG_DATE)
-        }
     }
 
     override fun onStop() {
@@ -125,6 +155,63 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
     override fun onDateSelected(date: Date) {
         crime.date = date
         updateUI()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        when {
+            resultCode != Activity.RESULT_OK -> return
+
+            requestCode == REQUEST_CONTACT && data != null -> {
+                val contactUri: Uri? = data.data
+                val queryFields = arrayOf(ContactsContract.Contacts.DISPLAY_NAME)
+                val cursor = contactUri?.let {
+                    requireActivity().contentResolver
+                        .query(it, queryFields, null, null, null)
+                }
+
+                cursor?.use {
+                    if (it.count == 0) {
+                        return
+                    }
+
+                    it.moveToFirst()
+                    val suspect = it.getString(0)
+                    crime.suspect = suspect
+                    crimeDetailViewModel.saveCrime(crime)
+                }
+            }
+        }
+    }
+
+    private fun updateUI() {
+        titleField.setText(crime.title)
+        dateButton.text = crime.formattedDate()
+        solvedCheckBox.apply {
+            isChecked = crime.isSolved
+            jumpDrawablesToCurrentState()
+        }
+
+        if (crime.suspect.isNotEmpty()) {
+            chooseSuspectButton.text = crime.suspect
+        }
+    }
+
+    private fun getCrimeReport(): String {
+        val solvedString = if (crime.isSolved) {
+            getString(R.string.crime_report_solved)
+        } else {
+            getString(R.string.crime_report_unsolved)
+        }
+
+        val dateString = DateFormat.format(DATE_FORMAT, crime.date).toString()
+
+        val suspect = if (crime.suspect.isBlank()) {
+            getString(R.string.crime_report_no_suspect)
+        } else {
+            getString(R.string.crime_report_suspect, crime.suspect)
+        }
+
+        return getString(R.string.crime_report, crime.title, dateString, solvedString, suspect)
     }
 
     companion object {
